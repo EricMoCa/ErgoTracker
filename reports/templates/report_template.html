@@ -1,9 +1,94 @@
-{# reports/templates/report_template.html #}
-{# TODO: implementar plantilla Jinja2 completa según CLAUDE.md (Task E) #}
 <!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8"><title>Reporte Ergonómico</title></head>
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Análisis Ergonómico</title>
+    <style>
+        /* Estilos inline — WeasyPrint no carga CSS externo por defecto */
+        body { font-family: Arial, sans-serif; font-size: 11pt; color: #1f2937; margin: 0; padding: 0; }
+        .cover { page-break-after: always; text-align: center; padding: 80px 40px; }
+        .cover h1 { color: #1F4E79; font-size: 28pt; margin-bottom: 12px; }
+        .cover h2 { color: #2E75B6; font-size: 18pt; margin-bottom: 20px; }
+        .cover p { font-size: 12pt; margin: 8px 0; }
+        .section-title { color: #1F4E79; border-bottom: 2px solid #2E75B6; padding-bottom: 4px; margin-top: 24px; }
+        .risk-badge { padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 10pt; display: inline-block; }
+        .risk-NEGLIGIBLE { background: #D1FAE5; color: #065F46; }
+        .risk-LOW        { background: #D1FAE5; color: #065F46; }
+        .risk-MEDIUM     { background: #FEF3C7; color: #92400E; }
+        .risk-HIGH       { background: #FED7AA; color: #9A3412; }
+        .risk-VERY_HIGH  { background: #FEE2E2; color: #991B1B; }
+        table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+        th { background: #1F4E79; color: white; padding: 8px; font-size: 10pt; text-align: left; }
+        td { padding: 6px 8px; border-bottom: 1px solid #E5E7EB; font-size: 10pt; }
+        tr:nth-child(even) { background: #F0F7FF; }
+        .chart-img { width: 100%; max-width: 600px; margin: 12px auto; display: block; }
+        .recommendations p { margin: 6px 0; line-height: 1.6; }
+        @page { margin: 2cm; }
+    </style>
+</head>
 <body>
-<p>Placeholder — ver CLAUDE.md para la plantilla completa.</p>
+
+<!-- PORTADA -->
+<div class="cover">
+    <h1>Reporte de Análisis Ergonómico</h1>
+    <h2>{{ report.video_path | basename }}</h2>
+    <p>Generado: {{ report.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+    <p>Persona analizada: {{ report.person_height_cm }} cm</p>
+    <br/>
+    <span class="risk-badge risk-{{ report.summary.max_risk_level if report.summary.max_risk_level else 'NEGLIGIBLE' }}">
+        Riesgo máximo: {{ report.summary.max_risk_level if report.summary.max_risk_level else 'N/D' }}
+    </span>
+</div>
+
+<!-- RESUMEN EJECUTIVO -->
+<h2 class="section-title">Resumen Ejecutivo</h2>
+<table>
+    <tr><th>Parámetro</th><th>Valor</th></tr>
+    <tr><td>Duración del video</td><td>{{ "%.1f"|format(report.duration_s) }} segundos</td></tr>
+    <tr><td>Frames analizados</td><td>{{ report.analyzed_frames }} / {{ report.total_frames }}</td></tr>
+    <tr><td>Métodos aplicados</td><td>{{ report.methods_used | join(', ') }}</td></tr>
+    {% if report.summary.max_reba_score %}
+    <tr><td>Score REBA máximo</td><td>{{ report.summary.max_reba_score }} / 15</td></tr>
+    {% endif %}
+    {% if report.summary.max_rula_score %}
+    <tr><td>Score RULA máximo</td><td>{{ report.summary.max_rula_score }} / 7</td></tr>
+    {% endif %}
+    <tr><td>Frames con riesgo ALTO o MUY ALTO</td><td>{{ "%.1f"|format(report.summary.pct_frames_high_risk * 100) }}%</td></tr>
+    <tr><td>Frames con riesgo MEDIO</td><td>{{ "%.1f"|format(report.summary.pct_frames_medium_risk * 100) }}%</td></tr>
+</table>
+
+<!-- GRÁFICAS -->
+<h2 class="section-title">Evolución Temporal del Riesgo</h2>
+<img class="chart-img" src="data:image/png;base64,{{ charts.risk_timeline }}" alt="Risk Timeline"/>
+
+<h2 class="section-title">Distribución de Riesgo</h2>
+<img class="chart-img" src="data:image/png;base64,{{ charts.risk_pie }}" alt="Risk Distribution"/>
+
+<!-- VIOLACIONES DE REGLAS -->
+{% if violations %}
+<h2 class="section-title">Violaciones de Reglas Detectadas</h2>
+<table>
+    <tr><th>Regla</th><th>Articulación</th><th>Riesgo</th><th>Acción</th></tr>
+    {% for v in violations %}
+    <tr>
+        <td>{{ v.rule.description }}</td>
+        <td>{{ v.rule.joint }}</td>
+        <td><span class="risk-badge risk-{{ v.rule.risk_level }}">{{ v.rule.risk_level }}</span></td>
+        <td>{{ v.rule.action }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+<!-- RECOMENDACIONES -->
+{% if report.summary.recommendations %}
+<h2 class="section-title">Recomendaciones</h2>
+<div class="recommendations">
+    {% for rec in report.summary.recommendations %}
+    <p>• {{ rec }}</p>
+    {% endfor %}
+</div>
+{% endif %}
+
 </body>
 </html>

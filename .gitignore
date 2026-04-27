@@ -64,3 +64,13 @@ logs/
 # Temp
 tmp/
 temp/
+
+# Claude Code local config (no compartir)
+.claude/
+
+# Zip de distribución
+*.zip
+
+# Documentos de investigación / NDA
+*.docx
+*.doc
