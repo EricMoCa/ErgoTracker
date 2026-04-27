@@ -38,3 +38,18 @@ export function getReportUrl(reportId) {
 export function getAnnotatedVideoUrl(reportId) {
   return `/reports/${reportId}/video`
 }
+
+export async function getSetupStatus() {
+  const { data } = await api.get('/setup/status')
+  return data
+}
+
+export async function startModelDownload(modelName) {
+  const { data } = await api.post(`/setup/download/${modelName}`)
+  return data
+}
+
+export async function pollDownloadJob(jobId) {
+  const { data } = await api.get(`/setup/download/${jobId}`)
+  return data
+}

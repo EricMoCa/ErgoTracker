@@ -4,6 +4,7 @@ import UploadPanel from './components/UploadPanel'
 import JobMonitor from './components/JobMonitor'
 import ResultsPanel from './components/ResultsPanel'
 import RulesPanel from './components/RulesPanel'
+import SetupPanel from './components/SetupPanel'
 import './App.css'
 
 export default function App() {
@@ -33,6 +34,12 @@ export default function App() {
           onClick={() => setActiveTab('rules')}
         >
           Extracción de Reglas LLM
+        </button>
+        <button
+          className={activeTab === 'setup' ? 'active' : ''}
+          onClick={() => setActiveTab('setup')}
+        >
+          Configuración
         </button>
       </nav>
 
@@ -67,6 +74,7 @@ export default function App() {
         )}
 
         {activeTab === 'rules' && <RulesPanel />}
+        {activeTab === 'setup' && <SetupPanel />}
       </main>
     </div>
   )

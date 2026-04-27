@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from .config import settings
-from .routes import analysis, rules, reports
+from .routes import analysis, rules, reports, setup
 
 
 @asynccontextmanager
@@ -34,6 +34,7 @@ app.add_middleware(
 app.include_router(analysis.router)
 app.include_router(rules.router)
 app.include_router(reports.router)
+app.include_router(setup.router)
 
 
 @app.get("/health")

@@ -56,7 +56,7 @@ def _verify_sha256(path: Path, expected: str) -> bool:
     return sha256.hexdigest() == expected
 
 
-def ensure_model(name: str) -> Path:
+def ensure_model(name: str, progress_callback=None) -> Path:
     """
     Descarga el modelo si no existe localmente. Retorna el path local.
 
@@ -87,14 +87,22 @@ def ensure_model(name: str) -> Path:
             else:
                 logger.warning(f"SHA-256 mismatch para '{name}', re-descargando...")
                 model_path.unlink()
-                return _download_model(name, model_info, model_path)
+                return _download_model(name, model_info, model_path, progress_callback=progress_callback)
         return model_path
 
-    return _download_model(name, model_info, model_path)
+    return _download_model(name, model_info, model_path, progress_callback=progress_callback)
 
 
-def _download_model(name: str, model_info: dict, model_path: Path) -> Path:
-    """Realiza la descarga del modelo con soporte para ZIPs y fallback URLs."""
+def _download_model(
+    name: str,
+    model_info: dict,
+    model_path: Path,
+    progress_callback=None,
+) -> Path:
+    """Realiza la descarga del modelo con soporte para ZIPs y fallback URLs.
+
+    progress_callback: callable(downloaded_bytes: int, total_bytes: int) | None
+    """
     try:
         import requests
         from tqdm import tqdm
@@ -124,9 +132,11 @@ def _download_model(name: str, model_info: dict, model_path: Path) -> Path:
 
             if is_zip:
                 model_path = _download_and_extract_zip(
-                    name, response, total_size, model_path, model_info
+                    name, response, total_size, model_path, model_info,
+                    progress_callback=progress_callback,
                 )
             else:
+                downloaded = 0
                 with open(model_path, "wb") as f, tqdm(
                     desc=name,
                     total=total_size,
@@ -138,6 +148,9 @@ def _download_model(name: str, model_info: dict, model_path: Path) -> Path:
                         if chunk:
                             f.write(chunk)
                             bar.update(len(chunk))
+                            downloaded += len(chunk)
+                            if progress_callback:
+                                progress_callback(downloaded, total_size)
 
             logger.success(f"Modelo '{name}' descargado en {model_path}")
 
@@ -168,6 +181,7 @@ def _download_and_extract_zip(
     total_size: int,
     model_path: Path,
     model_info: dict,
+    progress_callback=None,
 ) -> Path:
     """Descarga un ZIP y extrae el ONNX especificado en zip_inner."""
     import tempfile
@@ -177,6 +191,7 @@ def _download_and_extract_zip(
 
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp_zip:
         tmp_zip_path = Path(tmp_zip.name)
+        downloaded = 0
         with tqdm(
             desc=f"{name} (zip)",
             total=total_size,
@@ -188,6 +203,9 @@ def _download_and_extract_zip(
                 if chunk:
                     tmp_zip.write(chunk)
                     bar.update(len(chunk))
+                    downloaded += len(chunk)
+                    if progress_callback:
+                        progress_callback(downloaded, total_size)
 
     try:
         with zipfile.ZipFile(tmp_zip_path, "r") as zf:
