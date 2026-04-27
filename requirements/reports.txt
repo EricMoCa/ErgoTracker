@@ -1,13 +1,15 @@
-# requirements/reports.txt
-# Task E — reports
-
--r base.txt
-jinja2>=3.1.0             # Plantillas HTML
-matplotlib>=3.8.0         # Generación de gráficas (modo headless Agg)
-reportlab>=4.1.0          # Backend PDF principal (sin dependencias de sistema)
-weasyprint>=60.0          # Backend PDF alternativo con CSS completo (requiere GTK3 en Windows)
+# reports: generación de reportes PDF profesionales
+pydantic>=2.5.0
+loguru>=0.7.0
+numpy>=1.24.0
+jinja2>=3.1.0
+matplotlib>=3.8.0
+reportlab>=4.1.0
+weasyprint>=60.0
 pytest>=8.0.0
 
-# El generador detecta automáticamente el backend disponible: WeasyPrint → reportlab → HTML
-# En Windows sin GTK3, reportlab es el backend activo.
-# WeasyPrint con GTK3: https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer
+# Backends PDF — el generador elige automáticamente el disponible:
+#   1. WeasyPrint (CSS completo) — requiere GTK3 en Windows
+#      Instalador GTK3: https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer
+#   2. reportlab (sin dependencias de sistema) — activo por defecto en Windows
+#   3. HTML puro — fallback final si ninguno está disponible

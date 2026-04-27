@@ -1,5 +1,5 @@
-# requirements/ergo.txt
-# Task B — ergo_engine
-
--r base.txt
+# ergo_engine: análisis ergonómico (REBA, RULA, OWAS, reglas LLM)
+pydantic>=2.5.0
+loguru>=0.7.0
+numpy>=1.24.0
 pytest>=8.0.0

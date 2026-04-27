@@ -1,22 +1,26 @@
-# requirements/advanced.txt
-# Task F — advanced_pipeline
-# Requiere pose.txt instalado primero.
-
--r base.txt
-torch>=2.1.0              # Para verificación de VRAM disponible
-opencv-python>=4.8.0      # Visual odometry fallback
+# advanced_pipeline: motores de estimación de postura con GPU
+pydantic>=2.5.0
+loguru>=0.7.0
+numpy>=1.24.0
+onnxruntime>=1.17.0
+opencv-python>=4.8.0
+requests>=2.31.0
+tqdm>=4.66.0
+torch>=2.1.0
 pytest>=8.0.0
 
-# Los siguientes se instalan manualmente desde sus repositorios oficiales:
+# Motores avanzados — instalar manualmente desde sus repos oficiales:
 #
-# GVHMR (SIGGRAPH Asia 2024) — world-grounded pose:
-#   git clone https://github.com/zju3dv/GVHMR
-#   pip install -e GVHMR/
+# GVHMR (recomendado, world-grounded):
+#   git clone https://github.com/zju3dv/GVHMR && pip install -e GVHMR/
 #
-# HumanMM (CVPR 2025) — multi-shot video:
-#   git clone https://github.com/zhangyuhong01/HumanMM-code
-#   pip install -e HumanMM-code/
+# TRAM (alternativo GPU):
+#   git clone https://github.com/yufu-wang/tram && pip install -e tram/
 #
-# STRIDE (WACV 2025) — occlusion refinement:
-#   Consultar paper para código oficial. Si no disponible,
-#   el fallback de interpolación temporal en stride_refinement.py es funcional.
+# HumanMM (video multi-plano):
+#   git clone https://github.com/zhangyuhong01/HumanMM-code && pip install -e HumanMM-code/
+#
+# WHAM (análisis de marcha, solo Linux):
+#   git clone https://github.com/yohanshin/WHAM
+#
+# Sin ninguno de los anteriores, el sistema usa MotionBERT Lite (CPU) como fallback.

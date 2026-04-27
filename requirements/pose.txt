@@ -1,9 +1,9 @@
-# requirements/pose.txt
-# Task A — pose_pipeline
-
--r base.txt
-onnxruntime>=1.17.0       # CPU inference para RTMPose y MotionBERT
-opencv-python>=4.8.0      # Lectura de video y preprocesamiento
-requests>=2.31.0          # Descarga de modelos ONNX desde URL
-tqdm>=4.66.0              # Barra de progreso en descarga de modelos
+# pose_pipeline: estimación de postura 3D desde video monocular
+pydantic>=2.5.0
+loguru>=0.7.0
+numpy>=1.24.0
+onnxruntime>=1.17.0
+opencv-python>=4.8.0
+requests>=2.31.0
+tqdm>=4.66.0
 pytest>=8.0.0
