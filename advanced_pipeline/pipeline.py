@@ -1,3 +1,5 @@
+import numpy as np
+
 from schemas import VideoInput, SkeletonSequence
 from pose_pipeline import PosePipeline
 from .pipeline_router import PipelineRouter, VideoProfile, HardwareProfile
@@ -86,12 +88,78 @@ class AdvancedPosePipeline:
         return self._fallback.process(video_input)
 
     def _build_video_profile(self, video_input: VideoInput) -> VideoProfile:
-        """v1: basic profile. v2: real video analysis (duration, motion, occlusion)."""
+        """
+        Analyse the video with OpenCV to build a real VideoProfile:
+        - duration from frame count / fps
+        - camera_motion_score from mean optical-flow magnitude between sampled frames
+        - has_multiple_shots from histogram correlation drops
+        - occlusion_score estimated from how many sampled frames lack a clear person bbox
+        """
+        try:
+            import cv2
+        except ImportError:
+            return VideoProfile(duration_s=0.0)
+
+        cap = cv2.VideoCapture(video_input.path)
+        if not cap.isOpened():
+            return VideoProfile(duration_s=0.0)
+
+        fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration_s = total / fps if fps > 0 else 0.0
+
+        # Sample at most 60 frames evenly for speed
+        sample_step = max(1, total // 60)
+        sampled: list[np.ndarray] = []
+        for fi in range(0, total, sample_step):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, fi)
+            ret, frame = cap.read()
+            if ret:
+                sampled.append(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
+        cap.release()
+
+        if len(sampled) < 2:
+            return VideoProfile(duration_s=duration_s)
+
+        # Camera motion: mean optical flow magnitude between consecutive sampled frames
+        motion_scores: list[float] = []
+        shot_boundaries = 0
+        prev_hist = None
+        flow_params = dict(pyr_scale=0.5, levels=3, winsize=15, iterations=3, poly_n=5, poly_sigma=1.2, flags=0)
+
+        for i in range(1, len(sampled)):
+            flow = cv2.calcOpticalFlowFarneback(sampled[i - 1], sampled[i], None, **flow_params)
+            mag, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+            motion_scores.append(float(mag.mean()))
+
+            # Shot detection via histogram correlation
+            h_curr = cv2.calcHist([sampled[i]], [0], None, [64], [0, 256])
+            cv2.normalize(h_curr, h_curr)
+            if prev_hist is not None:
+                corr = cv2.compareHist(prev_hist, h_curr, cv2.HISTCMP_CORREL)
+                if corr < 0.45:
+                    shot_boundaries += 1
+            prev_hist = h_curr
+
+        # Normalise motion: clamp to [0,1] using empirical scale (5 px/frame ≈ 1.0)
+        raw_motion = float(np.mean(motion_scores)) if motion_scores else 0.0
+        camera_motion_score = min(1.0, raw_motion / 5.0)
+
+        # Occlusion estimation: frames where optical flow is very low everywhere
+        # (person not visible → detector would fail → pose unreliable)
+        low_motion_frames = sum(1 for s in motion_scores if s < 0.3)
+        occlusion_score = min(1.0, low_motion_frames / max(len(motion_scores), 1))
+
+        logger.debug(
+            f"VideoProfile: duration={duration_s:.1f}s  motion={camera_motion_score:.2f}"
+            f"  shots={shot_boundaries}  occlusion={occlusion_score:.2f}"
+        )
+
         return VideoProfile(
-            duration_s=0.0,
-            camera_motion_score=0.0,
-            occlusion_score=0.0,
-            has_multiple_shots=False,
+            duration_s=duration_s,
+            has_multiple_shots=shot_boundaries >= 2,
+            camera_motion_score=camera_motion_score,
+            occlusion_score=occlusion_score,
             requires_gait_analysis=False,
         )
 

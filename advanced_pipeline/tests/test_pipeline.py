@@ -81,10 +81,12 @@ def test_gvhmr_result_used_when_available(synthetic_video_path):
     assert isinstance(result, SkeletonSequence)
 
 
-def test_build_video_profile_returns_defaults(synthetic_video_path):
+def test_build_video_profile_real_analysis(synthetic_video_path):
     pipeline = AdvancedPosePipeline(device="cpu")
     video_input = VideoInput(path=synthetic_video_path)
     profile = pipeline._build_video_profile(video_input)
-    assert profile.duration_s == 0.0
+    # Real analysis: duration > 0, no shot cuts in a static synthetic video
+    assert profile.duration_s > 0.0
     assert profile.has_multiple_shots is False
-    assert profile.occlusion_score == 0.0
+    assert 0.0 <= profile.camera_motion_score <= 1.0
+    assert 0.0 <= profile.occlusion_score <= 1.0

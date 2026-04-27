@@ -1,5 +1,5 @@
 import numpy as np
-from schemas import SkeletonSequence
+from schemas import Keypoint3D, Skeleton3D, SkeletonSequence
 from loguru import logger
 
 FOOT_JOINTS = [
@@ -8,6 +8,19 @@ FOOT_JOINTS = [
     "left_foot_index", "right_foot_index",
 ]
 _CONTACT_VELOCITY_THRESHOLD_M = 0.02
+
+# Joints whose Y coordinate must stay >= floor when a foot is in contact.
+# Ordered from lowest (feet) to highest to preserve relative distances.
+_ALL_JOINTS_ORDERED = [
+    "left_ankle", "right_ankle", "left_heel", "right_heel",
+    "left_foot_index", "right_foot_index",
+    "left_knee", "right_knee",
+    "left_hip", "right_hip", "mid_hip",
+    "left_shoulder", "right_shoulder", "mid_shoulder",
+    "left_elbow", "right_elbow",
+    "left_wrist", "right_wrist",
+    "neck", "nose", "left_eye", "right_eye",
+]
 
 
 class ContactRefinement:
@@ -49,8 +62,82 @@ class ContactRefinement:
         skeleton_seq: SkeletonSequence,
         contact_labels: list[bool],
     ) -> SkeletonSequence:
-        # v1 stub: return unmodified — floor pinning not yet implemented
-        return skeleton_seq
+        """
+        Pin foot joints to the ground plane during contact frames to eliminate
+        foot sliding.
+
+        Algorithm:
+        1. Compute the ground plane Y level as the minimum foot-joint Y across
+           all contact frames (robustly, using the 5th percentile to ignore noise).
+        2. For each contact frame, if any foot joint is below the floor Y,
+           shift the entire skeleton up by the penetration amount.
+        3. For non-contact frames leave the skeleton untouched.
+        """
+        frames = list(skeleton_seq.frames)
+        if not any(contact_labels):
+            return skeleton_seq
+
+        # Collect foot-joint Y values in contact frames to estimate floor level
+        foot_ys: list[float] = []
+        for i, frame in enumerate(frames):
+            if not contact_labels[i]:
+                continue
+            for jn in FOOT_JOINTS:
+                if jn in frame.keypoints and frame.keypoints[jn].confidence > 0.3:
+                    foot_ys.append(frame.keypoints[jn].y)
+
+        if not foot_ys:
+            return skeleton_seq
+
+        floor_y = float(np.percentile(foot_ys, 5))
+        logger.debug(f"ContactRefinement floor_y = {floor_y:.4f} m")
+
+        corrected_frames: list[Skeleton3D] = []
+        for i, frame in enumerate(frames):
+            if not contact_labels[i]:
+                corrected_frames.append(frame)
+                continue
+
+            # Find the lowest foot joint in this frame
+            min_foot_y = min(
+                (frame.keypoints[jn].y for jn in FOOT_JOINTS
+                 if jn in frame.keypoints and frame.keypoints[jn].confidence > 0.3),
+                default=floor_y,
+            )
+            penetration = floor_y - min_foot_y  # positive → foot is below floor
+
+            if abs(penetration) < 1e-4:
+                corrected_frames.append(frame)
+                continue
+
+            # Shift all keypoints vertically by penetration
+            new_kps: dict[str, Keypoint3D] = {}
+            for name, kp in frame.keypoints.items():
+                new_kps[name] = Keypoint3D(
+                    x=kp.x,
+                    y=kp.y + penetration,
+                    z=kp.z,
+                    confidence=kp.confidence,
+                    occluded=kp.occluded,
+                )
+
+            corrected_frames.append(
+                Skeleton3D(
+                    frame_idx=frame.frame_idx,
+                    timestamp_s=frame.timestamp_s,
+                    keypoints=new_kps,
+                    scale_px_to_m=frame.scale_px_to_m,
+                    person_height_cm=frame.person_height_cm,
+                    coordinate_system=frame.coordinate_system,
+                )
+            )
+
+        return SkeletonSequence(
+            video_path=skeleton_seq.video_path,
+            fps=skeleton_seq.fps,
+            total_frames=skeleton_seq.total_frames,
+            frames=corrected_frames,
+        )
 
     def get_contact_events(self, skeleton_seq: SkeletonSequence) -> list[dict]:
         """
