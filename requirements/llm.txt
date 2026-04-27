@@ -1,0 +1,7 @@
+# requirements/llm.txt
+# Task C — llm_rules
+
+-r base.txt
+pymupdf>=1.23.0           # Extracción de texto desde PDF (import fitz)
+requests>=2.31.0          # Llamadas HTTP a Ollama
+pytest>=8.0.0

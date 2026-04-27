@@ -1,0 +1,5 @@
+# requirements/ergo.txt
+# Task B — ergo_engine
+
+-r base.txt
+pytest>=8.0.0

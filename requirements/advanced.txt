@@ -1,0 +1,22 @@
+# requirements/advanced.txt
+# Task F — advanced_pipeline
+# Requiere pose.txt instalado primero.
+
+-r base.txt
+torch>=2.1.0              # Para verificación de VRAM disponible
+opencv-python>=4.8.0      # Visual odometry fallback
+pytest>=8.0.0
+
+# Los siguientes se instalan manualmente desde sus repositorios oficiales:
+#
+# GVHMR (SIGGRAPH Asia 2024) — world-grounded pose:
+#   git clone https://github.com/zju3dv/GVHMR
+#   pip install -e GVHMR/
+#
+# HumanMM (CVPR 2025) — multi-shot video:
+#   git clone https://github.com/zhangyuhong01/HumanMM-code
+#   pip install -e HumanMM-code/
+#
+# STRIDE (WACV 2025) — occlusion refinement:
+#   Consultar paper para código oficial. Si no disponible,
+#   el fallback de interpolación temporal en stride_refinement.py es funcional.

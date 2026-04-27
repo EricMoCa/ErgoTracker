@@ -1,0 +1,13 @@
+# requirements/reports.txt
+# Task E — reports
+
+-r base.txt
+weasyprint>=60.0          # HTML → PDF (requiere GTK3 en Windows; ver NOTA abajo)
+jinja2>=3.1.0             # Plantillas HTML
+matplotlib>=3.8.0         # Generación de gráficas (modo headless Agg)
+pytest>=8.0.0
+
+# NOTA Windows: WeasyPrint requiere GTK3 runtime.
+# Descarga desde https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer
+# Alternativa sin GTK: usar reportlab (ver generator.py fallback)
+# pip install reportlab>=4.1.0
