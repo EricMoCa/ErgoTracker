@@ -5,6 +5,7 @@ from schemas import VideoInput, AnalysisReport, ReportSummary, RiskLevel
 from pose_pipeline import PosePipeline
 from ergo_engine import ErgoEngine
 from reports import ReportGenerator
+from reports.video_annotator import VideoAnnotator
 from loguru import logger
 
 
@@ -42,8 +43,20 @@ class AnalysisOrchestrator:
         pdf_path = Path(output_dir) / f"{report.id}.pdf"
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
         self.report_generator.generate(report, str(pdf_path))
-        logger.success(f"Analysis complete. Report: {pdf_path}")
 
+        # Generar video anotado con esqueleto coloreado por riesgo
+        video_out = Path(output_dir) / f"{report.id}_annotated.mp4"
+        try:
+            VideoAnnotator().generate(
+                video_path=video_input.path,
+                skeleton_seq=skeleton_seq,
+                frame_scores=frame_scores,
+                output_path=str(video_out),
+            )
+        except Exception as e:
+            logger.warning(f"Video anotado no generado (no crítico): {e}")
+
+        logger.success(f"Analysis complete. Report: {pdf_path}")
         return report
 
     def _build_report(self, video_input, skeleton_seq, frame_scores) -> AnalysisReport:

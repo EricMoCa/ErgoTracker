@@ -34,3 +34,7 @@ export async function pollRulesJob(jobId) {
 export function getReportUrl(reportId) {
   return `/reports/${reportId}/download`
 }
+
+export function getAnnotatedVideoUrl(reportId) {
+  return `/reports/${reportId}/video`
+}
