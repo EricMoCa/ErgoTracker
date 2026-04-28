@@ -17,6 +17,7 @@ from .model_downloader import ensure_model
 from .detector import PersonDetector, BBox
 from .pose_2d import PoseEstimator2D, Keypoint2D
 from .pose_3d import PoseLifter3D
+from .geometry_lifter import GeometricLifter
 from .height import HeightAnchor
 
 
@@ -25,6 +26,11 @@ class PosePipeline:
     Orquestador del pipeline completo de estimación de postura.
     Entrada: VideoInput
     Salida: SkeletonSequence con coordenadas 3D en metros (camera-relative en CPU_ONLY).
+
+    Modos de operación (en orden de preferencia):
+      1. Completo  — YOLO + RTMPose + MotionBERT Lite  (mayor precisión 3D)
+      2. Geométrico — YOLO + RTMPose + GeometricLifter  (sin MotionBERT)
+      3. Sintético — sin modelos                        (siempre disponible)
     """
 
     def __init__(self, device: str = "cpu") -> None:
@@ -32,26 +38,41 @@ class PosePipeline:
         self._detector: Optional[PersonDetector] = None
         self._pose_2d: Optional[PoseEstimator2D] = None
         self._lifter_3d: Optional[PoseLifter3D] = None
+        self._geo_lifter = GeometricLifter()
         self.height_anchor = HeightAnchor()
         self._models_loaded = False
+        self._use_geometric = False  # True when MotionBERT unavailable
 
     def _load_models(self) -> bool:
-        """Carga los modelos ONNX. Retorna True si todos están disponibles."""
+        """
+        Carga los modelos ONNX disponibles.
+        Retorna True si al menos YOLO + RTMPose están disponibles.
+        MotionBERT es opcional — si falta, usa GeometricLifter.
+        """
         if self._models_loaded:
             return True
         try:
             yolo_path = ensure_model("yolov8n")
             rtm_path = ensure_model("rtmpose_m")
-            mb_path = ensure_model("motionbert_lite")
             self._detector = PersonDetector(str(yolo_path), self.device)
             self._pose_2d = PoseEstimator2D(str(rtm_path), self.device)
-            self._lifter_3d = PoseLifter3D(str(mb_path), self.device)
-            self._models_loaded = True
-            logger.info("Modelos ONNX cargados correctamente")
-            return True
         except Exception as e:
-            logger.warning(f"No se pudieron cargar modelos ONNX: {e}. Usando modo sintético.")
+            logger.warning(f"No se pudieron cargar modelos YOLO/RTMPose: {e}. Usando modo sintético.")
             return False
+
+        # MotionBERT es opcional
+        try:
+            mb_path = ensure_model("motionbert_lite")
+            self._lifter_3d = PoseLifter3D(str(mb_path), self.device)
+            self._use_geometric = False
+            logger.info("Modelos ONNX cargados correctamente (YOLO + RTMPose + MotionBERT)")
+        except Exception as e:
+            self._lifter_3d = None
+            self._use_geometric = True
+            logger.info(f"MotionBERT no disponible ({e}). Usando lifter geométrico (YOLO + RTMPose).")
+
+        self._models_loaded = True
+        return True
 
     def process(self, video_input: VideoInput) -> SkeletonSequence:
         """
@@ -98,7 +119,7 @@ class PosePipeline:
                 frames=[],
             )
 
-        if models_available and self._detector and self._pose_2d and self._lifter_3d:
+        if models_available and self._detector and self._pose_2d:
             return self._process_with_models(
                 raw_frames, video_path, fps, total_frames, video_input.person_height_cm
             )
@@ -115,8 +136,8 @@ class PosePipeline:
         total_frames: int,
         person_height_cm: float,
     ) -> SkeletonSequence:
-        """Pipeline completo con modelos ONNX reales."""
-        assert self._detector and self._pose_2d and self._lifter_3d
+        """Pipeline con modelos ONNX (YOLO + RTMPose) + lifter (MotionBERT o geométrico)."""
+        assert self._detector and self._pose_2d
 
         keypoints_2d_seq: list[dict[str, Keypoint2D]] = []
         frame_indices: list[int] = []
@@ -131,19 +152,27 @@ class PosePipeline:
             keypoints_2d_seq.append(kpts_2d)
             frame_indices.append(frame_idx)
 
-        keypoints_3d_seq = self._lifter_3d.lift(keypoints_2d_seq)
-
-        # Calcular escala usando el primer frame
-        scale = person_height_cm / 100.0
-        if keypoints_3d_seq:
-            scale = self.height_anchor.compute_scale_factor(
-                keypoints_3d_seq[0], person_height_cm
+        if self._use_geometric:
+            # Geometric lifting: scale is embedded in the lifter output
+            keypoints_3d_seq = self._geo_lifter.lift(
+                keypoints_2d_seq,
+                person_height_cm=person_height_cm,
+                img_w=float(w),
+                img_h=float(h),
             )
-
-        scaled_seq = self.height_anchor.apply_scale(keypoints_3d_seq, scale)
+            scale = person_height_cm / 100.0
+        else:
+            assert self._lifter_3d
+            keypoints_3d_seq = self._lifter_3d.lift(keypoints_2d_seq)
+            scale = person_height_cm / 100.0
+            if keypoints_3d_seq:
+                scale = self.height_anchor.compute_scale_factor(
+                    keypoints_3d_seq[0], person_height_cm
+                )
+            keypoints_3d_seq = self.height_anchor.apply_scale(keypoints_3d_seq, scale)
 
         skeletons: list[Skeleton3D] = []
-        for i, (frame_idx, kps) in enumerate(zip(frame_indices, scaled_seq)):
+        for i, (frame_idx, kps) in enumerate(zip(frame_indices, keypoints_3d_seq)):
             skeletons.append(Skeleton3D(
                 frame_idx=frame_idx,
                 timestamp_s=frame_idx / fps,
