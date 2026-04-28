@@ -10,6 +10,7 @@ export default defineConfig({
       '/rules': 'http://localhost:8000',
       '/reports': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
+      '/setup': 'http://localhost:8000',
     },
   },
 })

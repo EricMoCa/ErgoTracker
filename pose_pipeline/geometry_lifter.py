@@ -183,4 +183,13 @@ class GeometricLifter:
                 return -dx * 0.5  # wrist in front of elbow if arm forward
             return sign * turn_z * 1.2
 
+        if name in ("left_knee", "right_knee", "left_ankle", "right_ankle"):
+            hip_kp = kps_2d.get(f"{side}_hip")
+            kp2 = kps_2d.get(name)
+            if hip_kp and kp2 and hip_kp.confidence > 0.2 and kp2.confidence > 0.2:
+                # In perspective: pixel Y lower than hip → foot is in front (negative Z)
+                dy_px = kp2.y - hip_kp.y  # positive = below hip in image
+                return dy_px * scale * 0.35
+            return 0.0
+
         return 0.0
