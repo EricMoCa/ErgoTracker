@@ -102,8 +102,20 @@ class VideoAnnotator:
         W_out  = W * 2
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(str(output_path), fourcc, fps, (W_out, H))
+        writer = None
+        for codec in ("avc1", "H264", "X264", "mp4v"):
+            fourcc = cv2.VideoWriter_fourcc(*codec)
+            w = cv2.VideoWriter(str(output_path), fourcc, fps, (W_out, H))
+            if w.isOpened():
+                writer = w
+                if codec != "mp4v":
+                    logger.info(f"Using H.264 codec ({codec}) — browser-compatible")
+                else:
+                    logger.warning("H.264 unavailable, using mp4v — video may not play in browser")
+                break
+            w.release()
+        if writer is None:
+            raise RuntimeError("No suitable video codec found (tried avc1, H264, X264, mp4v)")
 
         skel_idx  = {s.frame_idx: s for s in skeleton_seq.frames}
         score_idx = {fs.frame_idx: fs for fs in frame_scores}

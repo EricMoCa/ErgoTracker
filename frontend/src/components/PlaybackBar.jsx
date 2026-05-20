@@ -1,13 +1,19 @@
-import { useState, useEffect } from 'react'
-
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-export default function PlaybackBar({ duration = 0, currentTime = 0, onSeek, totalFrames = 0, currentFrame = 0, onFrameChange }) {
-  const [playing, setPlaying] = useState(false)
+export default function PlaybackBar({
+  duration = 0,
+  currentTime = 0,
+  onSeek,
+  totalFrames = 0,
+  currentFrame = 0,
+  onFrameChange,
+  playing = false,
+  onTogglePlaying,
+}) {
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
   const frameProgress = totalFrames > 0 ? (currentFrame / Math.max(totalFrames - 1, 1)) * 100 : 0
@@ -28,7 +34,7 @@ export default function PlaybackBar({ duration = 0, currentTime = 0, onSeek, tot
         </button>
         <button
           className="pb-btn play"
-          onClick={() => setPlaying(p => !p)}
+          onClick={() => onTogglePlaying?.(!playing)}
           title={playing ? 'Pausar' : 'Reproducir'}
         >
           <span className="material-symbols-outlined">{playing ? 'pause' : 'play_arrow'}</span>

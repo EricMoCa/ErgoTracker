@@ -1,5 +1,6 @@
+import json
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from ..config import settings
 
@@ -17,6 +18,16 @@ async def download_report(report_id: str):
         media_type="application/pdf",
         filename=f"ergo_report_{report_id}.pdf",
     )
+
+
+@router.get("/{report_id}/skeleton")
+async def get_skeleton(report_id: str):
+    """Returns 3D skeleton frames as JSON for the WorldPanel viewer."""
+    skeleton_path = settings.reports_output_dir / f"{report_id}_skeleton.json"
+    if not skeleton_path.exists():
+        raise HTTPException(status_code=404, detail="Skeleton data not available")
+    data = json.loads(skeleton_path.read_text())
+    return JSONResponse(content=data)
 
 
 @router.get("/{report_id}/video")

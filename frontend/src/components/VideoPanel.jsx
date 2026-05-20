@@ -1,6 +1,14 @@
 import { useRef } from 'react'
 
-export default function VideoPanel({ file, onFileChange, videoRef }) {
+export default function VideoPanel({
+  file,
+  onFileChange,
+  videoRef,
+  onLoadedMetadata,
+  onTimeUpdate,
+  onPlay,
+  onPause,
+}) {
   const inputRef = useRef()
 
   const handleDrop = (e) => {
@@ -24,6 +32,10 @@ export default function VideoPanel({ file, onFileChange, videoRef }) {
             muted
             loop
             playsInline
+            onLoadedMetadata={onLoadedMetadata}
+            onTimeUpdate={onTimeUpdate}
+            onPlay={onPlay}
+            onPause={onPause}
           />
         ) : (
           <div

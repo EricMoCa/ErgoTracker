@@ -1,8 +1,16 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { startAnalysis, getReportUrl, getAnnotatedVideoUrl } from '../api'
 
 const METHODS = ['REBA', 'RULA', 'OWAS']
 const RISK_ORDER = ['NEGLIGIBLE', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH']
+
+const ENGINES = [
+  { id: 'auto',    label: 'Auto',    icon: 'auto_awesome',  desc: 'Selección automática' },
+  { id: 'gvhmr',  label: 'GVHMR',   icon: 'model_training', desc: 'World-grounded · cámara móvil' },
+  { id: 'wham',   label: 'WHAM',    icon: 'directions_walk', desc: 'Contacto pie-suelo · marcha' },
+  { id: 'tram',   label: 'TRAM',    icon: 'route',          desc: 'SLAM + ViT-H · escala métrica' },
+  { id: 'humanmm',label: 'HumanMM', icon: 'movie',          desc: 'Multi-plano · cortes de cámara' },
+]
 
 function maxRisk(frameScores) {
   if (!frameScores?.length) return 'NEGLIGIBLE'
@@ -12,13 +20,47 @@ function maxRisk(frameScores) {
   }, 'NEGLIGIBLE')
 }
 
-export default function ControlSidebar({ file, onJobStarted, job, result, analyzing }) {
+export default function ControlSidebar({
+  file,
+  onJobStarted,
+  job,
+  result,
+  analyzing,
+  progress = 0,
+  stage = '',
+  showSkeleton: showSkeletonProp,
+  setShowSkeleton: setShowSkeletonProp,
+  showRisk: showRiskProp,
+  setShowRisk: setShowRiskProp,
+  showTrail: showTrailProp,
+  setShowTrail: setShowTrailProp,
+  showMesh: showMeshProp,
+  setShowMesh: setShowMeshProp,
+}) {
   const [height, setHeight]   = useState(170)
   const [methods, setMethods] = useState(['REBA'])
   const [error, setError]     = useState(null)
   const [showSkeleton, setShowSkeleton] = useState(true)
   const [showRisk, setShowRisk]         = useState(true)
   const [showTrail, setShowTrail]       = useState(true)
+  const [showMesh, setShowMesh]         = useState(true)
+
+  // Allow parent to control visualization toggles (optional)
+  const ctrlShowSkeleton = showSkeletonProp ?? showSkeleton
+  const ctrlSetShowSkeleton = setShowSkeletonProp ?? setShowSkeleton
+  const ctrlShowRisk = showRiskProp ?? showRisk
+  const ctrlSetShowRisk = setShowRiskProp ?? setShowRisk
+  const ctrlShowTrail = showTrailProp ?? showTrail
+  const ctrlSetShowTrail = setShowTrailProp ?? setShowTrail
+  const ctrlShowMesh = showMeshProp ?? showMesh
+  const ctrlSetShowMesh = setShowMeshProp ?? setShowMesh
+
+  // Advanced pipeline state
+  const [gpuMode, setGpuMode]               = useState(false)
+  const [engine, setEngine]                 = useState('auto')
+  const [gaitAnalysis, setGaitAnalysis]     = useState(false)
+  const [multiShot, setMultiShot]           = useState(false)
+  const [cameraMotion, setCameraMotion]     = useState(false)
 
   const toggleMethod = (m) =>
     setMethods(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
@@ -31,6 +73,11 @@ export default function ControlSidebar({ file, onJobStarted, job, result, analyz
       fd.append('video', file)
       fd.append('person_height_cm', height)
       fd.append('ergo_methods', methods.join(','))
+      fd.append('processing_mode', gpuMode ? 'gpu_enhanced' : 'cpu_only')
+      fd.append('preferred_engine', engine)
+      fd.append('requires_gait_analysis', gaitAnalysis)
+      fd.append('has_multiple_shots', multiShot)
+      fd.append('camera_motion_high', cameraMotion)
       const { job_id } = await startAnalysis(fd)
       onJobStarted(job_id)
     } catch (e) {
@@ -54,21 +101,28 @@ export default function ControlSidebar({ file, onJobStarted, job, result, analyz
           <div className="toggle-row">
             <span className="toggle-label">Esqueleto</span>
             <label className="toggle-switch">
-              <input type="checkbox" checked={showSkeleton} onChange={e => setShowSkeleton(e.target.checked)} />
+              <input type="checkbox" checked={ctrlShowSkeleton} onChange={e => ctrlSetShowSkeleton(e.target.checked)} />
               <span className="toggle-slider" />
             </label>
           </div>
           <div className="toggle-row">
             <span className="toggle-label">HUD de riesgo</span>
             <label className="toggle-switch">
-              <input type="checkbox" checked={showRisk} onChange={e => setShowRisk(e.target.checked)} />
+              <input type="checkbox" checked={ctrlShowRisk} onChange={e => ctrlSetShowRisk(e.target.checked)} />
               <span className="toggle-slider" />
             </label>
           </div>
           <div className="toggle-row">
             <span className="toggle-label">Trail de trayectoria</span>
             <label className="toggle-switch">
-              <input type="checkbox" checked={showTrail} onChange={e => setShowTrail(e.target.checked)} />
+              <input type="checkbox" checked={ctrlShowTrail} onChange={e => ctrlSetShowTrail(e.target.checked)} />
+              <span className="toggle-slider" />
+            </label>
+          </div>
+          <div className="toggle-row">
+            <span className="toggle-label">Malla (SMPL-like)</span>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={ctrlShowMesh} onChange={e => ctrlSetShowMesh(e.target.checked)} />
               <span className="toggle-slider" />
             </label>
           </div>
@@ -109,6 +163,64 @@ export default function ControlSidebar({ file, onJobStarted, job, result, analyz
             </div>
           </div>
 
+          {/* ── Motor 3D ── */}
+          <div className="ctrl-group">
+            <div className="ctrl-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Motor 3D</span>
+              <label className="toggle-switch" style={{ marginLeft: 8 }}>
+                <input type="checkbox" checked={gpuMode} onChange={e => setGpuMode(e.target.checked)} />
+                <span className="toggle-slider" />
+              </label>
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--on-surface-variant)', marginBottom: 6 }}>
+              {gpuMode
+                ? <span style={{ color: 'var(--primary)' }}>GPU Enhanced — GVHMR / WHAM / TRAM / HumanMM</span>
+                : 'CPU Only — MotionBERT Lite'}
+            </div>
+
+            {gpuMode && (
+              <>
+                <div style={{ display: 'grid', gap: 4, marginBottom: 8 }}>
+                  {ENGINES.map(eng => (
+                    <button
+                      key={eng.id}
+                      className={`engine-chip ${engine === eng.id ? 'active' : ''}`}
+                      onClick={() => setEngine(eng.id)}
+                      title={eng.desc}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{eng.icon}</span>
+                      <span style={{ fontWeight: 600 }}>{eng.label}</span>
+                      <span className="engine-desc">{eng.desc}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="ctrl-label" style={{ marginBottom: 4 }}>Perfil de video</div>
+                <div className="toggle-row">
+                  <span className="toggle-label">Análisis de marcha</span>
+                  <label className="toggle-switch">
+                    <input type="checkbox" checked={gaitAnalysis} onChange={e => setGaitAnalysis(e.target.checked)} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+                <div className="toggle-row">
+                  <span className="toggle-label">Múltiples planos</span>
+                  <label className="toggle-switch">
+                    <input type="checkbox" checked={multiShot} onChange={e => setMultiShot(e.target.checked)} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+                <div className="toggle-row">
+                  <span className="toggle-label">Cámara en movimiento</span>
+                  <label className="toggle-switch">
+                    <input type="checkbox" checked={cameraMotion} onChange={e => setCameraMotion(e.target.checked)} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+              </>
+            )}
+          </div>
+
           {error && <div className="error-banner">{error}</div>}
 
           <button
@@ -124,8 +236,8 @@ export default function ControlSidebar({ file, onJobStarted, job, result, analyz
         </div>
       </div>
 
-      {/* Job status */}
-      {job && (
+      {/* Job status — show as soon as analysis starts */}
+      {(analyzing || job) && (
         <div className="sidebar-section">
           <div className="sidebar-section-header">
             <span className="material-symbols-outlined">monitoring</span>
@@ -133,19 +245,29 @@ export default function ControlSidebar({ file, onJobStarted, job, result, analyz
           </div>
           <div className="sidebar-section-body">
             <div className="job-progress">
-              <div className="job-status-row">
-                <span className={`job-status-badge ${job.status}`}>{job.status}</span>
-                {job.elapsed != null && (
-                  <span style={{ fontSize: 11, color: 'var(--on-surface-variant)' }}>{job.elapsed}s</span>
+              <div className="job-status-row" style={{ marginBottom: 4 }}>
+                <span className={`job-status-badge ${job?.status ?? 'running'}`}>
+                  {job?.status ?? 'running'}
+                </span>
+                {(stage || analyzing) && (
+                  <span style={{ fontSize: 10, color: 'var(--primary)', flex: 1, textAlign: 'right' }}>
+                    {stage || 'Iniciando...'}
+                  </span>
                 )}
               </div>
               <div className="progress-track">
                 <div
-                  className={`progress-fill-cyber ${['pending','running'].includes(job.status) ? 'indeterminate' : ''}`}
-                  style={job.status === 'completed' ? { width: '100%' } : job.status === 'failed' ? { width: '0%' } : {}}
+                  className="progress-fill-cyber"
+                  style={{
+                    width: `${job?.status === 'completed' ? 100 : progress}%`,
+                    transition: 'width 0.4s ease',
+                  }}
                 />
               </div>
-              {job.error && <div className="error-banner">{job.error}</div>}
+              <div style={{ fontSize: 10, color: 'var(--on-surface-variant)', marginTop: 3 }}>
+                {job?.status === 'completed' ? '100%' : `${Math.round(progress)}%`}
+              </div>
+              {job?.error && <div className="error-banner">{job.error}</div>}
             </div>
           </div>
         </div>

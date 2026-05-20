@@ -50,14 +50,19 @@ class AdvancedPosePipeline:
         hw = HardwareProfile.detect()
         video_profile = self._build_video_profile(video_input)
 
-        motor = self._router.select(
-            video_profile=video_profile,
-            hardware=hw,
-            gvhmr_available=self._gvhmr.is_available(),
-            wham_available=self._wham.is_available(),
-            tram_available=self._tram.is_available(),
-            humanmm_available=self._humanmm.is_available(),
-        )
+        preferred = getattr(video_input, "preferred_engine", "auto")
+        if preferred and preferred != "auto":
+            # User explicitly requested a specific engine — honour if available
+            motor = self._resolve_preferred(preferred)
+        else:
+            motor = self._router.select(
+                video_profile=video_profile,
+                hardware=hw,
+                gvhmr_available=self._gvhmr.is_available(),
+                wham_available=self._wham.is_available(),
+                tram_available=self._tram.is_available(),
+                humanmm_available=self._humanmm.is_available(),
+            )
 
         logger.info(f"AdvancedPosePipeline → motor: {motor}")
         result: SkeletonSequence | None = None
@@ -86,6 +91,19 @@ class AdvancedPosePipeline:
 
         logger.warning("Falling back to base PosePipeline (CPU).")
         return self._fallback.process(video_input)
+
+    def _resolve_preferred(self, preferred: str) -> str:
+        """Honour user's engine preference; fall back to motionbert_lite if unavailable."""
+        checks = {
+            "gvhmr": self._gvhmr.is_available(),
+            "wham": self._wham.is_available(),
+            "tram": self._tram.is_available(),
+            "humanmm": self._humanmm.is_available(),
+        }
+        if checks.get(preferred, False):
+            return preferred
+        logger.warning(f"Engine '{preferred}' not installed — falling back to auto-select")
+        return "motionbert_lite"
 
     def _build_video_profile(self, video_input: VideoInput) -> VideoProfile:
         """
@@ -155,12 +173,17 @@ class AdvancedPosePipeline:
             f"  shots={shot_boundaries}  occlusion={occlusion_score:.2f}"
         )
 
+        # User-supplied flags override auto-detection
+        gait = getattr(video_input, "requires_gait_analysis", False)
+        multishot = getattr(video_input, "has_multiple_shots", False) or shot_boundaries >= 2
+        motion_high = getattr(video_input, "camera_motion_high", False)
+
         return VideoProfile(
             duration_s=duration_s,
-            has_multiple_shots=shot_boundaries >= 2,
-            camera_motion_score=camera_motion_score,
+            has_multiple_shots=multishot,
+            camera_motion_score=max(camera_motion_score, 0.3 if motion_high else 0.0),
             occlusion_score=occlusion_score,
-            requires_gait_analysis=False,
+            requires_gait_analysis=gait,
         )
 
     def process_video_path(

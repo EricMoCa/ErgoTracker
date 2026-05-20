@@ -7,7 +7,7 @@ const NAV_ITEMS = [
 export default function SideNav({ activeTab, onTabChange }) {
   return (
     <aside className="side-nav">
-      {NAV_ITEMS.map((item, i) => (
+      {NAV_ITEMS.map((item) => (
         <button
           key={item.id}
           className={`side-nav-btn ${activeTab === item.id ? 'active' : ''}`}

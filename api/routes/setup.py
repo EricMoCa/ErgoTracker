@@ -25,6 +25,7 @@ _PACKAGES = [
     ("onnxruntime",  "onnxruntime"),
     ("numpy",        "numpy"),
     ("torch",        "torch (opcional)"),
+    ("ultralytics",  "ultralytics (requerido para exportar yolov8n.onnx)"),
 ]
 
 _ONNX_MODELS = {

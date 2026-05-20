@@ -15,3 +15,8 @@ class VideoInput(BaseModel):
     processing_mode: ProcessingMode = ProcessingMode.CPU_ONLY
     ergo_methods: list[str] = Field(default=["REBA"])
     rules_profile_path: Optional[str] = None
+    # Advanced pipeline options (only relevant when processing_mode=GPU_ENHANCED)
+    preferred_engine: str = "auto"          # auto | gvhmr | wham | tram | humanmm
+    requires_gait_analysis: bool = False    # enables GVHMR+contact or WHAM
+    has_multiple_shots: bool = False        # enables HumanMM
+    camera_motion_high: bool = False        # hints router toward GVHMR

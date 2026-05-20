@@ -446,6 +446,38 @@ html, body, #root {
   color: var(--primary);
 }
 
+/* Engine selector chips */
+.engine-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--outline-variant);
+  background: transparent;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.engine-chip:hover { border-color: var(--primary); color: var(--on-surface); }
+.engine-chip.active {
+  background: rgba(0,242,255,0.10);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.engine-desc {
+  flex: 1;
+  font-size: 9px;
+  color: var(--on-surface-variant);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.engine-chip.active .engine-desc { color: rgba(0,242,255,0.7); }
+
 /* Analyze button */
 .btn-analyze {
   width: 100%;

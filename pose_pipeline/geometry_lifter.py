@@ -163,6 +163,9 @@ class GeometricLifter:
         side = "left" if name.startswith("left") else "right"
         sign = 1.0 if side == "left" else -1.0
 
+        # Cap turn_z to avoid extreme Z values when person is sideways
+        turn_z = min(turn_z, 0.06)
+
         if name in ("left_shoulder", "right_shoulder", "mid_shoulder", "neck"):
             return sign * turn_z
 
@@ -170,9 +173,8 @@ class GeometricLifter:
             sh = kps_2d.get(f"{side}_shoulder")
             el = kps_2d.get(f"{side}_elbow")
             if sh and el and sh.confidence > 0.3 and el.confidence > 0.3:
-                # Elbow below shoulder → arm possibly forward/backward
                 dy = (el.y - sh.y) * scale
-                return dy * 0.3  # small Z from arm drop
+                return max(-0.06, min(0.06, dy * 0.15))
             return sign * turn_z
 
         if name in ("left_wrist", "right_wrist"):
@@ -180,16 +182,8 @@ class GeometricLifter:
             wr = kps_2d.get(f"{side}_wrist")
             if el and wr and el.confidence > 0.3 and wr.confidence > 0.3:
                 dx = (wr.x - el.x) * scale
-                return -dx * 0.5  # wrist in front of elbow if arm forward
-            return sign * turn_z * 1.2
+                return max(-0.08, min(0.08, -dx * 0.25))
+            return sign * turn_z
 
-        if name in ("left_knee", "right_knee", "left_ankle", "right_ankle"):
-            hip_kp = kps_2d.get(f"{side}_hip")
-            kp2 = kps_2d.get(name)
-            if hip_kp and kp2 and hip_kp.confidence > 0.2 and kp2.confidence > 0.2:
-                # In perspective: pixel Y lower than hip → foot is in front (negative Z)
-                dy_px = kp2.y - hip_kp.y  # positive = below hip in image
-                return dy_px * scale * 0.35
-            return 0.0
-
+        # Legs/ankles: keep Z near zero — geometric heuristics unreliable for depth
         return 0.0

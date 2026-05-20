@@ -39,6 +39,11 @@ export function getAnnotatedVideoUrl(reportId) {
   return `/reports/${reportId}/video`
 }
 
+export async function getSkeletonFrames(reportId) {
+  const { data } = await api.get(`/reports/${reportId}/skeleton`)
+  return data  // { fps, total_frames, coordinate_system, frames: [{frame_idx, keypoints: {...}}] }
+}
+
 export async function getSetupStatus() {
   const { data } = await api.get('/setup/status')
   return data
