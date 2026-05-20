@@ -16,7 +16,9 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 MODELS: dict[str, dict] = {
     "yolov8n": {
-        "url": "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.onnx",
+        # Direct ONNX links from Ultralytics were removed in v8.2+.
+        # url is a sentinel that triggers _export_yolov8n_via_ultralytics().
+        "url": "__ultralytics_export__",
         "filename": "yolov8n.onnx",
         "sha256": None,
     },
@@ -32,10 +34,11 @@ MODELS: dict[str, dict] = {
         "sha256": None,
     },
     "motionbert_lite": {
-        # Fuente primaria: Hugging Face (más estable que GitHub releases)
-        "url": "https://huggingface.co/walterzhu/MotionBERT/resolve/main/MB_lite.onnx",
-        # Alternativa si la primaria falla:
-        "url_fallback": "https://github.com/Walter0807/MotionBERT/releases/download/v0.1/motionbert_lite.onnx",
+        # No public ONNX release exists (both HuggingFace and GitHub URLs return 404).
+        # Sentinel triggers immediate failure so pipeline falls back to GeometricLifter.
+        # To use MotionBERT: export from PyTorch checkpoint and place motionbert_lite.onnx
+        # in MODEL_DIR manually. See: https://github.com/Walter0807/MotionBERT
+        "url": "__unavailable__",
         "filename": "motionbert_lite.onnx",
         "sha256": None,
     },
@@ -89,6 +92,17 @@ def ensure_model(name: str, progress_callback=None) -> Path:
                 model_path.unlink()
                 return _download_model(name, model_info, model_path, progress_callback=progress_callback)
         return model_path
+
+    # Special case: yolov8n uses ultralytics export instead of direct download
+    if model_info.get("url") == "__ultralytics_export__":
+        return _export_yolov8n_via_ultralytics(model_path, progress_callback)
+
+    # No public download available — caller should place file in MODEL_DIR manually
+    if model_info.get("url") == "__unavailable__":
+        raise RuntimeError(
+            f"Modelo '{name}' no tiene descarga pública disponible. "
+            f"Colocar '{model_info['filename']}' manualmente en MODEL_DIR."
+        )
 
     return _download_model(name, model_info, model_path, progress_callback=progress_callback)
 
@@ -237,4 +251,40 @@ def _download_and_extract_zip(
     finally:
         tmp_zip_path.unlink(missing_ok=True)
 
+    return model_path
+
+
+def _export_yolov8n_via_ultralytics(model_path: Path, progress_callback=None) -> Path:
+    """
+    Downloads yolov8n.pt via ultralytics and exports it to ONNX.
+    Ultralytics removed pre-built ONNX from their GitHub releases in v8.2+.
+    """
+    try:
+        from ultralytics import YOLO
+    except ImportError:
+        raise RuntimeError(
+            "ultralytics no instalado. Instalar con: pip install ultralytics\n"
+            "Luego volver a ejecutar."
+        )
+
+    import tempfile, shutil
+
+    logger.info("Descargando yolov8n.pt y exportando a ONNX (ultralytics)…")
+
+    if progress_callback:
+        progress_callback(0, 100)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        model = YOLO("yolov8n.pt")  # downloads .pt automatically
+        exported = model.export(format="onnx", imgsz=640, dynamic=False, simplify=True)
+        src = Path(str(exported))
+        if not src.exists():
+            raise RuntimeError(f"ultralytics export no produjo archivo en {src}")
+        shutil.copy2(src, model_path)
+
+    if progress_callback:
+        progress_callback(100, 100)
+
+    size_kb = model_path.stat().st_size // 1024
+    logger.success(f"yolov8n.onnx exportado en {model_path} ({size_kb} KB)")
     return model_path

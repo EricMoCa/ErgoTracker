@@ -1,7 +1,10 @@
+import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-from schemas import VideoInput, AnalysisReport, ReportSummary, RiskLevel
+from typing import Callable
+
+from schemas import VideoInput, AnalysisReport, ReportSummary, RiskLevel, ProcessingMode
 from pose_pipeline import PosePipeline
 from ergo_engine import ErgoEngine
 from reports import ReportGenerator
@@ -12,40 +15,73 @@ from loguru import logger
 class AnalysisOrchestrator:
     """
     Orchestrates the full ergonomic analysis pipeline:
-    1. PosePipeline     → SkeletonSequence
-    2. ErgoEngine       → list[FrameErgonomicScore]
-    3. ReportGenerator  → PDF saved to disk
+    1. PosePipeline / AdvancedPosePipeline  → SkeletonSequence
+    2. ErgoEngine                           → list[FrameErgonomicScore]
+    3. ReportGenerator                      → PDF saved to disk
+    4. VideoAnnotator                       → annotated MP4
+    5. Skeleton JSON                        → saved for 3D viewer
 
-    GPU note: the LLM rule extraction step (llm_rules/) must complete and release
-    VRAM before calling this orchestrator when ProcessingMode.GPU_ENHANCED is used.
-    The orchestrator does NOT call RuleExtractor directly.
+    When processing_mode=GPU_ENHANCED, uses AdvancedPosePipeline which auto-selects
+    among GVHMR / WHAM / TRAM / HumanMM based on VideoProfile and hardware.
     """
 
     def __init__(self, device: str = "cpu"):
-        self.pose_pipeline = PosePipeline(device=device)
+        self._device = device
+        self._cpu_pipeline = PosePipeline(device="cpu")
+        self._gpu_pipeline = None   # lazy — only if gpu_enhanced requested
         self.report_generator = ReportGenerator()
 
-    def run(self, video_input: VideoInput, output_dir: str = "./output/reports") -> AnalysisReport:
-        logger.info(f"Starting analysis: {video_input.path}")
+    def _get_pipeline(self, video_input: VideoInput):
+        if video_input.processing_mode == ProcessingMode.GPU_ENHANCED:
+            if self._gpu_pipeline is None:
+                try:
+                    from advanced_pipeline import AdvancedPosePipeline
+                    self._gpu_pipeline = AdvancedPosePipeline(device="cuda")
+                    logger.info("Using AdvancedPosePipeline (GPU Enhanced)")
+                except Exception as e:
+                    logger.warning(f"AdvancedPosePipeline unavailable ({e}), falling back to CPU")
+                    return self._cpu_pipeline
+            return self._gpu_pipeline
+        return self._cpu_pipeline
 
-        logger.info("Phase 1: estimating 3D pose...")
-        skeleton_seq = self.pose_pipeline.process(video_input)
+    def run(
+        self,
+        video_input: VideoInput,
+        output_dir: str = "./output/reports",
+        progress_callback: Callable[[float, str], None] | None = None,
+    ) -> AnalysisReport:
+        def report(pct: float, stage: str):
+            logger.info(f"[{pct:.0f}%] {stage}")
+            if progress_callback:
+                progress_callback(pct, stage)
 
-        logger.info("Phase 2: ergonomic analysis...")
+        report(5, "Preparando video...")
+        logger.info(f"Starting analysis: {video_input.path} "
+                    f"[mode={video_input.processing_mode}, engine={video_input.preferred_engine}]")
+
+        report(10, "Estimando postura 3D...")
+        pipeline = self._get_pipeline(video_input)
+        skeleton_seq = pipeline.process(video_input)
+
+        report(60, "Análisis ergonómico...")
         ergo_engine = ErgoEngine(
             methods=video_input.ergo_methods,
             rules_json_path=video_input.rules_profile_path,
         )
         frame_scores = ergo_engine.analyze(skeleton_seq)
 
-        report = self._build_report(video_input, skeleton_seq, frame_scores)
+        report(75, "Construyendo reporte...")
+        analysis_report = self._build_report(video_input, skeleton_seq, frame_scores)
 
-        pdf_path = Path(output_dir) / f"{report.id}.pdf"
-        pdf_path.parent.mkdir(parents=True, exist_ok=True)
-        self.report_generator.generate(report, str(pdf_path))
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
 
-        # Generar video anotado con esqueleto coloreado por riesgo
-        video_out = Path(output_dir) / f"{report.id}_annotated.mp4"
+        report(80, "Generando PDF...")
+        pdf_path = out / f"{analysis_report.id}.pdf"
+        self.report_generator.generate(analysis_report, str(pdf_path))
+
+        report(88, "Generando video anotado...")
+        video_out = out / f"{analysis_report.id}_annotated.mp4"
         try:
             VideoAnnotator().generate(
                 video_path=video_input.path,
@@ -54,10 +90,38 @@ class AnalysisOrchestrator:
                 output_path=str(video_out),
             )
         except Exception as e:
-            logger.warning(f"Video anotado no generado (no crítico): {e}")
+            logger.warning(f"Annotated video not generated (non-critical): {e}")
 
+        report(96, "Guardando datos 3D...")
+        skeleton_path = out / f"{analysis_report.id}_skeleton.json"
+        try:
+            self._save_skeleton_json(skeleton_seq, skeleton_path)
+        except Exception as e:
+            logger.warning(f"Skeleton JSON not saved (non-critical): {e}")
+
+        report(100, "Completado")
         logger.success(f"Analysis complete. Report: {pdf_path}")
-        return report
+        return analysis_report
+
+    def _save_skeleton_json(self, skeleton_seq, path: Path) -> None:
+        """Save compact skeleton frames for the 3D viewer."""
+        frames = []
+        for skel in skeleton_seq.frames:
+            kps = {}
+            for name, kp in skel.keypoints.items():
+                if kp.confidence > 0.05:
+                    kps[name] = {"x": round(kp.x, 4), "y": round(kp.y, 4),
+                                 "z": round(kp.z, 4), "confidence": round(kp.confidence, 3)}
+            frames.append({"frame_idx": skel.frame_idx, "keypoints": kps})
+        payload = {
+            "fps": float(getattr(skeleton_seq, "fps", 0.0) or 0.0),
+            "total_frames": int(getattr(skeleton_seq, "total_frames", 0) or 0),
+            "coordinate_system": getattr(skeleton_seq.frames[0], "coordinate_system", "camera")
+            if skeleton_seq.frames
+            else "camera",
+            "frames": frames,
+        }
+        path.write_text(json.dumps(payload, separators=(",", ":")))
 
     def _build_report(self, video_input, skeleton_seq, frame_scores) -> AnalysisReport:
         high_risk_frames = sum(

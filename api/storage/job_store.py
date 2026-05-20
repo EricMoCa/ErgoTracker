@@ -20,6 +20,8 @@ class Job:
         self.created_at = datetime.now()
         self.result: Any = None
         self.error: str | None = None
+        self.progress: float = 0.0   # 0–100
+        self.stage: str = "En cola"
 
 
 class JobStore:
@@ -53,6 +55,12 @@ class JobStore:
                 job.result = result
             if error is not None:
                 job.error = error
+
+    def update_progress(self, job_id: str, progress: float, stage: str) -> None:
+        job = self._jobs.get(job_id)
+        if job:
+            job.progress = progress
+            job.stage = stage
 
     def list_all(self) -> list[Job]:
         return list(self._jobs.values())

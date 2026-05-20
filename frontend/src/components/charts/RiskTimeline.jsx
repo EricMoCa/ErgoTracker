@@ -4,7 +4,6 @@ import {
 } from 'recharts'
 
 const RISK_TO_NUM = { NEGLIGIBLE: 0, LOW: 1, MEDIUM: 2, HIGH: 3, VERY_HIGH: 4 }
-const NUM_TO_LABEL = ['Negligible', 'Bajo', 'Medio', 'Alto', 'Muy Alto']
 
 function buildData(frameScores) {
   return frameScores.map((f) => ({

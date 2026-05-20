@@ -12,6 +12,7 @@ const PKG_LABELS = {
   onnxruntime: 'ONNX Runtime',
   numpy:       'NumPy',
   torch:       'PyTorch (opcional)',
+  ultralytics: 'Ultralytics (export YOLOv8n)',
 }
 
 function StatusDot({ ok, loading }) {
@@ -93,7 +94,7 @@ export default function SetupPanel() {
     try {
       const s = await getSetupStatus()
       setStatus(s)
-    } catch (e) {
+    } catch {
       setError('No se puede conectar al servidor API en localhost:8000')
     } finally {
       setLoading(false)
@@ -244,11 +245,17 @@ export default function SetupPanel() {
           </p>
           <div style={{ fontSize: 12, lineHeight: 2, fontFamily: 'monospace', background: '#f8fafc', padding: '12px 14px', borderRadius: 6, border: '1px solid var(--border)' }}>
             <div># YOLOv8n (detector)</div>
-            <div style={{ color: '#64748b' }}>https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.onnx</div>
+            <div style={{ color: '#64748b' }}>
+              En este proyecto, <strong>yolov8n.onnx</strong> se genera vía <strong>ultralytics</strong> (no hay URL ONNX estable).\n
+              Instala ultralytics y usa el botón “Descargar” para exportar.
+            </div>
             <div style={{ marginTop: 8 }}># RTMPose-m (pose 2D) — descomprimir el ZIP</div>
             <div style={{ color: '#64748b' }}>https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.zip</div>
             <div style={{ marginTop: 8 }}># MotionBERT Lite (lifting 3D)</div>
-            <div style={{ color: '#64748b' }}>https://huggingface.co/walterzhu/MotionBERT/resolve/main/MB_lite.onnx → guardar como motionbert_lite.onnx</div>
+            <div style={{ color: '#64748b' }}>
+              No hay descarga pública ONNX en el pipeline actual. Si quieres MotionBERT, debes exportarlo desde un checkpoint PyTorch\n
+              y guardar el archivo como <strong>motionbert_lite.onnx</strong>.
+            </div>
           </div>
         </div>
       )}

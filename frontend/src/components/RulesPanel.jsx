@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { extractRules, pollRulesJob } from '../api'
 
 export default function RulesPanel() {
-  const [file, setFile] = useState(null)
+  const [file, setFile]               = useState(null)
   const [profileName, setProfileName] = useState('custom')
-  const [loading, setLoading] = useState(false)
-  const [status, setStatus] = useState(null)
-  const [result, setResult] = useState(null)
-  const [error, setError] = useState(null)
+  const [loading, setLoading]         = useState(false)
+  const [status, setStatus]           = useState(null)
+  const [result, setResult]           = useState(null)
+  const [error, setError]             = useState(null)
 
   const handleSubmit = async () => {
     if (!file) return
@@ -23,7 +23,7 @@ export default function RulesPanel() {
 
       let data
       while (true) {
-        await new Promise((r) => setTimeout(r, 2000))
+        await new Promise(r => setTimeout(r, 2000))
         data = await pollRulesJob(job_id)
         setStatus(data.status)
         if (data.status === 'completed' || data.status === 'failed') break
@@ -39,60 +39,80 @@ export default function RulesPanel() {
   }
 
   return (
-    <div className="rules-layout">
-      <div className="card">
-        <h2>Extracción de Reglas Ergonómicas con LLM</h2>
-        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
-          Sube un PDF con normativa ergonómica y Gemma 3 4B extraerá las reglas automáticamente.
-          Este proceso utiliza la GPU — no iniciar mientras hay un análisis de video en curso.
-        </p>
-
-        <div className="form-group">
-          <label>Documento PDF</label>
-          <input
-            type="file"
-            accept=".pdf"
-            onChange={(e) => setFile(e.target.files[0])}
-          />
-          {file && <p style={{ fontSize: 12, color: '#16a34a', marginTop: 4 }}>{file.name} seleccionado</p>}
+    <div className="tab-content">
+      <div className="cyber-card" style={{ maxWidth: 600 }}>
+        <div className="cyber-card-header">
+          <span className="material-symbols-outlined">psychology</span>
+          Extracción de Reglas con LLM
         </div>
+        <div className="cyber-card-body">
+          <p style={{ fontSize: 12, color: 'var(--on-surface-variant)', lineHeight: 1.6 }}>
+            Sube un PDF con normativa ergonómica y Gemma 3 4B extraerá las reglas automáticamente.
+            Este proceso utiliza la GPU — no iniciar mientras hay un análisis de video en curso.
+          </p>
 
-        <div className="form-group">
-          <label>Nombre del perfil</label>
-          <input
-            type="text"
-            value={profileName}
-            onChange={(e) => setProfileName(e.target.value)}
-            placeholder="ej: iso_11226"
-          />
+          <div>
+            <div className="cyber-label">Documento PDF</div>
+            <label
+              className="cyber-drop"
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setFile(f) }}
+            >
+              <span className="material-symbols-outlined">upload_file</span>
+              {file
+                ? <span className="file-name">{file.name}</span>
+                : <p>Arrastra un PDF o haz clic para seleccionar</p>
+              }
+              <input
+                type="file"
+                accept=".pdf"
+                style={{ display: 'none' }}
+                onChange={e => setFile(e.target.files[0])}
+              />
+            </label>
+          </div>
+
+          <div>
+            <div className="cyber-label">Nombre del perfil</div>
+            <input
+              type="text"
+              className="ctrl-input"
+              value={profileName}
+              onChange={e => setProfileName(e.target.value)}
+              placeholder="ej: iso_11226"
+            />
+          </div>
+
+          {error && <div className="error-banner">{error}</div>}
+
+          {status && !result && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className={`job-status-badge ${status}`}>{status}</span>
+              {(status === 'pending' || status === 'running') && (
+                <span style={{ fontSize: 12, color: 'var(--on-surface-variant)' }}>
+                  Procesando con Gemma 3...
+                </span>
+              )}
+            </div>
+          )}
+
+          {result && (
+            <div className="rules-success">
+              Extracción completada: <strong>{result.rules_count}</strong> reglas guardadas en <code>{result.profile}</code>
+            </div>
+          )}
+
+          <button
+            className="btn-analyze"
+            onClick={handleSubmit}
+            disabled={!file || loading}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+              {loading ? 'hourglass_top' : 'auto_awesome'}
+            </span>
+            {loading ? 'Procesando con Gemma 3...' : 'Extraer Reglas'}
+          </button>
         </div>
-
-        {error && <p className="error-msg">{error}</p>}
-
-        {status && !result && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <span className={`status-badge status-${status}`}>{status}</span>
-            {(status === 'pending' || status === 'running') && (
-              <span style={{ fontSize: 12, color: '#64748b' }}>Procesando con Gemma 3...</span>
-            )}
-          </div>
-        )}
-
-        {result && (
-          <div className="rules-result">
-            Extracción completada: <strong>{result.rules_count}</strong> reglas guardadas en{' '}
-            <code>{result.profile}</code>
-          </div>
-        )}
-
-        <button
-          className="btn btn-primary btn-full"
-          style={{ marginTop: 12 }}
-          onClick={handleSubmit}
-          disabled={!file || loading}
-        >
-          {loading ? 'Procesando...' : 'Extraer Reglas'}
-        </button>
       </div>
     </div>
   )
